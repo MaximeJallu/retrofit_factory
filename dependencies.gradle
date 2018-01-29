@@ -1,0 +1,44 @@
+ext {
+
+    compileSdkVersion = 26
+    buildToolsVersion = "27.0.0"
+    minSdkVersion = 16
+    targetSdkVersion = 26
+    versionCode = 1801291400
+    versionName = "1.0.0"
+
+//    minSdkVersion 16
+//    compileSdkVersion 26
+//    buildToolsVersion "27.0.0"
+
+    okHttp = 'com.squareup.okhttp3:okhttp:3.9.0'
+    okHttpLogging = 'com.squareup.okhttp3:logging-interceptor:3.9.0'
+    retrofit = 'com.squareup.retrofit2:retrofit:2.0.2'
+    retrofitGson = 'com.squareup.retrofit2:converter-gson:2.0.2'
+    retrofitRx = 'com.squareup.retrofit2:adapter-rxjava:2.0.2'
+    androidRx = 'io.reactivex:rxandroid:1.2.1'
+
+    persistentCookie = 'com.github.franmontiel:PersistentCookieJar:v1.0.1'
+
+    supportVersion = '24.1.1'
+    supportAnnotations = "com.android.support:support-annotations:$supportVersion"
+
+    junit = 'junit:junit:4.12'
+    mockito = 'org.mockito:mockito-all:2.0.2-beta'
+    powermockJunit = 'org.powermock:powermock-module-junit4:1.6.5'
+    powermockApi = 'org.powermock:powermock-api-mockito:1.6.5'
+
+    javaVersion = JavaVersion.VERSION_1_7
+}
+
+subprojects { project ->
+    project.configurations.all {
+        resolutionStrategy {
+            eachDependency { details ->
+                if (details.requested.group == 'com.android.support') {
+                    details.useVersion(rootProject.ext.supportVersion)
+                }
+            }
+        }
+    }
+}
