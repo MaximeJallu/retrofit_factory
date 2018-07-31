@@ -2,17 +2,16 @@ package com.android.jmaxime.factory.network;
 
 import android.content.Context;
 
-import com.franmontiel.persistentcookiejar.ClearableCookieJar;
-import com.franmontiel.persistentcookiejar.PersistentCookieJar;
-import com.franmontiel.persistentcookiejar.cache.SetCookieCache;
-import com.franmontiel.persistentcookiejar.persistence.SharedPrefsCookiePersistor;
-
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.Authenticator;
 import okhttp3.Cache;
+import okhttp3.CookieJar;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -20,9 +19,7 @@ import okhttp3.Response;
 import okhttp3.logging.HttpLoggingInterceptor;
 
 public final class OkHttpBuilder {
-    //region Constants *****************************************************************************
-
-    public static final int DEFAULT_TIMEOUT = 30;
+    private static final int DEFAULT_TIMEOUT = 30;
     private static final int CACHE_SIZE = 2048;
     private static final int CACHE_DURATION = 30;
     private static final Interceptor REWRITE_CACHE_CONTROL_INTERCEPTOR = new Interceptor() {
@@ -36,46 +33,46 @@ public final class OkHttpBuilder {
         }
     };
 
-    //endregion
-
-
-    //region Fields ********************************************************************************
-
     private int mTimeOut = DEFAULT_TIMEOUT;
-    private int mCacheSize;
-    private boolean mHasHeader;
-    private boolean mUseCache;
-    private String mToken;
-    private String mHeaderKey;
-    private String mApiKey;
-    private File mCacheDirectory;
-    private Interceptor mCacheInterceptor;
-    private ClearableCookieJar mCookieJar;
-    private HttpLoggingInterceptor.Level mLevel;
-
-    //endregion
-
-
-
-    //region Public Methods ************************************************************************
+    private Cache mCache;
+    private CookieJar mCookieJar;
+    private Authenticator mAuthenticator;
+    private List<Interceptor> mInterceptors = new ArrayList<>();
+    private List<Interceptor> mNetworkInterceptors = new ArrayList<>();
+    private OnClientCreatedListener mListener;
 
     public OkHttpBuilder() {
     }
 
-    public OkHttpBuilder authenticated(String token) {
-        mToken = token;
-        mHasHeader = true;
-        return this;
+    public OkHttpBuilder(OkHttpClient client) {
+        this(client, null);
+    }
+
+    public OkHttpBuilder(OkHttpClient client, OnClientCreatedListener listener) {
+        mTimeOut = client.connectTimeoutMillis();
+        mCache = client.cache();
+        mCookieJar = client.cookieJar();
+        mAuthenticator = client.authenticator();
+        mInterceptors.addAll(client.interceptors());
+        mNetworkInterceptors.addAll(client.networkInterceptors());
+        mListener = listener;
     }
 
     public OkHttpBuilder apiKey(String apiKey) {
         return apiKey("X-Api-Key", apiKey);
     }
 
-    public OkHttpBuilder apiKey(String headerKey, String apiKey) {
-        mHeaderKey = headerKey;
-        mApiKey = apiKey;
-        mHasHeader = true;
+    public OkHttpBuilder apiKey(final String headerKey, final String apiKey) {
+        mInterceptors.add(new Interceptor() {
+            @Override
+            public Response intercept(Chain chain) throws IOException {
+                Request.Builder request = chain.request().newBuilder();
+                if (apiKey != null) {
+                    request.header(headerKey, apiKey);
+                }
+                return chain.proceed(request.build());
+            }
+        });
         return this;
     }
 
@@ -84,25 +81,39 @@ public final class OkHttpBuilder {
     }
 
     public OkHttpBuilder useCache(File cacheDirectory, int cacheSize, Interceptor cacheInterceptor) {
-        mCacheDirectory = cacheDirectory;
-        mCacheSize = cacheSize;
-        mCacheInterceptor = cacheInterceptor;
-        mUseCache = true;
+        mCache = new Cache(cacheDirectory, cacheSize);
+        mNetworkInterceptors.add(cacheInterceptor);
         return this;
     }
 
-    public OkHttpBuilder useCookie(Context context) {
-        mCookieJar = new PersistentCookieJar(new SetCookieCache(), new SharedPrefsCookiePersistor(context));
+    public OkHttpBuilder useCookie(CookieJar cookieJar) {
+        mCookieJar = cookieJar;
         return this;
     }
 
-    public OkHttpBuilder loggingLevel() {
-        return loggingLevel(HttpLoggingInterceptor.Level.NONE);
+    public OkHttpBuilder loggingLevel(boolean isDebug) {
+        return loggingLevel(isDebug ? HttpLoggingInterceptor.Level.BODY : HttpLoggingInterceptor.Level.NONE);
     }
 
     public OkHttpBuilder loggingLevel(HttpLoggingInterceptor.Level level) {
-        mLevel = level;
+        mInterceptors.add(new HttpLoggingInterceptor().setLevel(level));
         return this;
+    }
+
+    public void authenticator(Authenticator authenticator) {
+        mAuthenticator = authenticator;
+    }
+
+    public void addInterceptor(Interceptor interceptor) {
+        mInterceptors.add(interceptor);
+    }
+
+    public void addNetworkInterceptor(Interceptor interceptor) {
+        mNetworkInterceptors.add(interceptor);
+    }
+
+    public void setOnClientCreatedListener(OnClientCreatedListener listener) {
+        mListener = listener;
     }
 
     public OkHttpBuilder timeOut(int timeOut) {
@@ -110,42 +121,49 @@ public final class OkHttpBuilder {
         return this;
     }
 
-    public OkHttpClient.Builder buildBuilder() {
+    public OkHttpClient.Builder originalBuilder() {
         OkHttpClient.Builder httpClient = new OkHttpClient.Builder();
         httpClient.readTimeout(mTimeOut, TimeUnit.SECONDS);
         httpClient.connectTimeout(mTimeOut, TimeUnit.SECONDS);
-        if (mUseCache) {
-            httpClient.addNetworkInterceptor(mCacheInterceptor);
-            httpClient.cache(new Cache(mCacheDirectory, mCacheSize));
+        if (mCache != null) {
+            httpClient.cache(mCache);
         }
         if (mCookieJar != null) {
             httpClient.cookieJar(mCookieJar);
         }
-        if (mLevel != null) {
-            httpClient.addInterceptor(new HttpLoggingInterceptor().setLevel(mLevel));
+        if (mAuthenticator != null) {
+            httpClient.authenticator(mAuthenticator);
         }
-        if (mHasHeader) {
-            httpClient.addInterceptor(new Interceptor() {
-                @Override
-                public Response intercept(Chain chain) throws IOException {
-                    Request original = chain.request();
-                    Request.Builder request = original.newBuilder();
-                    if (mToken != null) {
-                        request.header("Authorization", mToken);
-                    }
-                    if (mApiKey != null) {
-                        request.header(mHeaderKey, mApiKey);
-                    }
-                    return chain.proceed(request.build());
-                }
-            });
+        for (Interceptor interceptor : mInterceptors) {
+            httpClient.addInterceptor(interceptor);
+        }
+        for (Interceptor networkInterceptor : mNetworkInterceptors) {
+            httpClient.addNetworkInterceptor(networkInterceptor);
         }
         return httpClient;
     }
 
     public OkHttpClient build() {
-        return buildBuilder().build();
+        final OkHttpClient client = originalBuilder().build();
+        if (mListener != null) {
+            mListener.onClientCreated(client);
+        }
+        return client;
     }
 
-    //endregion
+    public OkHttpClient build(Context context, String apiKey, int timeOutValue, boolean addCache, boolean allowCookies) {
+        apiKey(apiKey);
+        timeOut(timeOutValue);
+        if (addCache) {
+            useCache(context);
+        }
+        if (allowCookies) {
+            useCookie(mCookieJar);
+        }
+        return originalBuilder().build();
+    }
+
+    public interface OnClientCreatedListener {
+        void onClientCreated(OkHttpClient client);
+    }
 }
