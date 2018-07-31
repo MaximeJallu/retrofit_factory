@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * @see ClientHttpHelper
+ * @see OkHttpConfiguration
  * @see ApiFactory
  * @see OkHttpBuilder
  */
@@ -14,14 +14,14 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ApiKeyService {
     /**
-     * Ex: "cube_assembler", "stores", "interact" ...
+     * e.g.: "cube_assembler", "stores", "interact" ...
      *
      * @return la key name de la api cible
      */
     String apiKeyName() default "";
 
     /**
-     * ex "proxy_v3", "cube", "integ", "stores", "open_voice" ...
+     * e.g. "proxy_v3", "cube", "integ", "stores", "open_voice" ...
      *
      * @return la clé de la base url cible
      */
@@ -36,7 +36,7 @@ public @interface ApiKeyService {
 
     /**
      * Set the time out
-     * 0: default
+     * -1: default
      * n: custom value
      * @see OkHttpBuilder
      * @return time out value, default returns -1 to let the OkHttpBuilder set the default (usually 30s)
@@ -46,14 +46,14 @@ public @interface ApiKeyService {
     /**
      * Cette valeur sera retourner à la Factory HttpClient
      *
-     * @return false si non défini
+     * @return false default value
      */
     boolean addCache() default false;
 
     /**
      * Cette valeur sera retourner à la Factory HttpClient
      *
-     * @return false si non défini
+     * @return false default value
      */
     boolean allowCookies() default false;
 }
