@@ -7,3 +7,4 @@
 /captures
 .externalNativeBuild
 .yml
+/factory/gradle.properties
